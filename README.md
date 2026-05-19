@@ -13,6 +13,8 @@ The project follows the two core workflows described in the work report:
 
 There is also a training-set purification command that proposes high-threshold merges between existing training clusters.
 
+The code is a refactor of the original dated research scripts, not a different algorithm. It keeps the original project's core choices: minimal normalization only, a character-level Transformer trained with contrastive pairs, exact normalized matches first, centroid cosine thresholds, conservative singleton retention, and human review of changed clusters.
+
 ## Install
 
 ```powershell
@@ -31,6 +33,7 @@ name-cluster auto-cluster `
   --full examples/fake_full_sample.csv `
   --output reports/demo_auto_cluster.xlsx `
   --threshold 0.90 `
+  --min-cluster-size 2 `
   --epochs 20 `
   --batch-size 16 `
   --d-model 96 `
@@ -42,6 +45,18 @@ name-cluster classify-singletons `
   --train examples/fake_training.csv `
   --pending examples/fake_pending.csv `
   --output reports/demo_singleton_classification.xlsx `
+  --threshold 0.90 `
+  --epochs 20 `
+  --batch-size 16 `
+  --d-model 96 `
+  --cache-path models/demo_char_transformer.pt
+```
+
+```powershell
+name-cluster recluster-pending `
+  --train examples/fake_training.csv `
+  --pending examples/fake_pending.csv `
+  --output reports/demo_pending_recluster.xlsx `
   --threshold 0.90 `
   --epochs 20 `
   --batch-size 16 `
@@ -64,3 +79,7 @@ Full-sample or pending data must include a company-name column. By default, the 
 ## Data Policy
 
 Real raw data and generated outputs are deliberately excluded by `.gitignore`. Keep production data under `data/raw/`, `data/interim/`, `data/processed/`, or outside this repository. Keep model checkpoints under `models/`.
+
+## Original Script Mapping
+
+See [docs/original_code_mapping.md](docs/original_code_mapping.md) for how the cleaned modules correspond to the original Python files.

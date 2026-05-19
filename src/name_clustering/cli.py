@@ -1,7 +1,13 @@
 import argparse
 
 from .model import ModelConfig
-from .workflows import AssignmentConfig, workflow_auto_cluster, workflow_classify_singletons, workflow_merge_training
+from .workflows import (
+    AssignmentConfig,
+    workflow_auto_cluster,
+    workflow_classify_singletons,
+    workflow_merge_training,
+    workflow_recluster_pending,
+)
 
 
 def add_model_args(parser: argparse.ArgumentParser) -> None:
@@ -45,6 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
     merge.add_argument("--threshold", type=float, default=0.93)
     merge.add_argument("--topk", type=int, default=20)
     add_model_args(merge)
+
+    recluster = subparsers.add_parser("recluster-pending", help="Cluster pending singleton names internally for manual review.")
+    recluster.add_argument("--train", required=True)
+    recluster.add_argument("--pending", required=True)
+    recluster.add_argument("--output", required=True)
+    recluster.add_argument("--name-col")
+    recluster.add_argument("--headerless", action="store_true")
+    recluster.add_argument("--threshold", type=float, default=0.90)
+    recluster.add_argument("--min-cluster-size", type=int, default=2)
+    add_model_args(recluster)
     return parser
 
 
@@ -61,6 +77,18 @@ def main() -> None:
         workflow_classify_singletons(args.train, args.pending, args.output, args.name_col, args.headerless, assignment, cfg)
     elif args.command == "merge-training":
         workflow_merge_training(args.train, args.output, args.threshold, args.topk, args.cache_path, cfg)
+    elif args.command == "recluster-pending":
+        workflow_recluster_pending(
+            args.train,
+            args.pending,
+            args.output,
+            args.name_col,
+            args.headerless,
+            args.threshold,
+            args.min_cluster_size,
+            args.cache_path,
+            cfg,
+        )
 
 
 if __name__ == "__main__":

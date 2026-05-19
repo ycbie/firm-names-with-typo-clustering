@@ -44,7 +44,7 @@ name-cluster classify-singletons `
 Observed behavior:
 
 - Five likely typo variants were assigned into existing clusters.
-- `Delta Marine Product Exporter` and `Northern Timber Export Company` stayed unclassified at the chosen threshold.
+- `Delta Marine Product Exporter` and the synthetic `Northern Timber...` names stayed unclassified against existing training clusters at the chosen threshold.
 
 ## Interpretation
 
@@ -56,3 +56,7 @@ For real data, quality still depends on:
 - high assignment thresholds;
 - manual review of changed clusters;
 - repeating the human-in-the-loop update cycle.
+
+## Pending-Name Reclustering
+
+The repository also includes `recluster-pending`, corresponding to the original singleton reclustering script. It clusters pending names among themselves by exact normalized duplicates and Transformer-embedding cosine connected components, then exports candidate clusters for manual review.

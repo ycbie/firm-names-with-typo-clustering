@@ -218,3 +218,68 @@ def workflow_merge_training(
             "sheet3_merge_edges": pd.DataFrame(merge_edges),
         },
     )
+
+
+def workflow_recluster_pending(
+    train_path: str,
+    pending_path: str,
+    output_path: str,
+    name_col: str | None = None,
+    headerless: bool = False,
+    threshold: float = 0.90,
+    min_cluster_size: int = 2,
+    cache_path: str | None = "models/char_transformer_cache.pt",
+    model_config: ModelConfig = ModelConfig(),
+) -> None:
+    """Cluster pending names internally, matching the original singleton reclustering script."""
+    df_train = read_training(train_path)
+    df_pending = read_pending(pending_path, name_col=name_col, headerless=headerless)
+    model, stoi = get_or_train_model(df_train, cache_path, model_config)
+
+    embeddings = encode_texts(model, stoi, df_pending["name_norm"].tolist())
+    uf = UnionFind(list(range(len(df_pending))))
+
+    for _, group in df_pending.groupby("name_norm"):
+        rows = list(group.index)
+        if len(rows) > 1:
+            anchor = rows[0]
+            for row in rows[1:]:
+                uf.union(anchor, row)
+
+    scores = embeddings @ embeddings.T
+    for i in range(len(df_pending)):
+        for j in range(i + 1, len(df_pending)):
+            if float(scores[i, j]) >= threshold:
+                uf.union(i, j)
+
+    components: Dict[int, List[int]] = {}
+    for row in range(len(df_pending)):
+        components.setdefault(uf.find(row), []).append(row)
+
+    next_id = int(df_train["id"].max()) + 1 if not df_train.empty else 1
+    assigned_ids = {}
+    cluster_sizes = {}
+    for root, rows in sorted(components.items(), key=lambda item: min(item[1])):
+        cluster_size = len(rows)
+        new_id = next_id
+        next_id += 1
+        for row in rows:
+            assigned_ids[row] = new_id
+            cluster_sizes[row] = cluster_size
+
+    df_out = df_pending.copy()
+    df_out["recluster_id"] = [assigned_ids[row] for row in range(len(df_pending))]
+    df_out["recluster_size"] = [cluster_sizes[row] for row in range(len(df_pending))]
+    df_out["recluster_method"] = np.where(df_out["recluster_size"] > 1, "pending_embedding_component", "pending_singleton")
+
+    clustered = df_out[df_out["recluster_size"] >= min_cluster_size].copy()
+    singleton = df_out[df_out["recluster_size"] == 1].copy()
+
+    write_excel_sheets(
+        output_path,
+        {
+            "sheet1_all_pending_reclustered": df_out,
+            "sheet2_clusters_for_review": clustered,
+            "sheet3_remaining_singletons": singleton,
+        },
+    )
