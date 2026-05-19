@@ -55,6 +55,16 @@ def build_char_vocab(texts: List[str]) -> Tuple[Dict[str, int], Dict[int, str]]:
     return stoi, {idx: ch for ch, idx in stoi.items()}
 
 
+def extend_char_vocab(stoi: Dict[str, int], texts: List[str]) -> Dict[str, int]:
+    """Add newly observed characters while preserving existing token ids."""
+    out = dict(stoi)
+    for text in texts:
+        for ch in text:
+            if ch not in out:
+                out[ch] = len(out)
+    return out
+
+
 def encode_text(text: str, stoi: Dict[str, int], max_len: int):
     ids = [stoi.get(ch, stoi[UNK]) for ch in text][:max_len]
     mask = [1] * len(ids)
@@ -92,6 +102,18 @@ class CharTransformerEncoder(nn.Module):
         mask = x_mask.unsqueeze(-1)
         pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1.0)
         return F.normalize(pooled, p=2, dim=-1)
+
+    def resize_token_embeddings(self, new_vocab_size: int) -> None:
+        """Expand the character embedding table when fine-tuning sees new characters."""
+        old_vocab_size, dim = self.emb.weight.shape
+        if new_vocab_size <= old_vocab_size:
+            return
+        new_emb = nn.Embedding(new_vocab_size, dim, padding_idx=0).to(self.emb.weight.device)
+        nn.init.normal_(new_emb.weight, mean=0.0, std=dim ** -0.5)
+        with torch.no_grad():
+            new_emb.weight[:old_vocab_size].copy_(self.emb.weight)
+            new_emb.weight[0].zero_()
+        self.emb = new_emb
 
 
 class PairDataset(Dataset):
@@ -143,11 +165,19 @@ def evaluate(model: CharTransformerEncoder, loader: DataLoader, device: str, tem
     return float(np.mean(losses)) if losses else float("inf")
 
 
-def train_char_transformer(df_train: pd.DataFrame, config: ModelConfig) -> Tuple[CharTransformerEncoder, Dict[str, int]]:
+def train_char_transformer(
+    df_train: pd.DataFrame,
+    config: ModelConfig,
+    initial_model: CharTransformerEncoder | None = None,
+    initial_stoi: Dict[str, int] | None = None,
+) -> Tuple[CharTransformerEncoder, Dict[str, int]]:
     set_seed(config.seed)
     device = get_device()
     df_train = df_train[df_train["name_norm"] != ""].copy()
-    stoi, _ = build_char_vocab(df_train["name_norm"].tolist())
+    if initial_stoi is None:
+        stoi, _ = build_char_vocab(df_train["name_norm"].tolist())
+    else:
+        stoi = extend_char_vocab(initial_stoi, df_train["name_norm"].tolist())
     pairs = build_positive_pairs(df_train, config)
 
     split = int(len(pairs) * (1 - config.val_ratio))
@@ -158,7 +188,12 @@ def train_char_transformer(df_train: pd.DataFrame, config: ModelConfig) -> Tuple
     train_loader = DataLoader(PairDataset(train_pairs, stoi, config.max_len), batch_size=config.batch_size, shuffle=True)
     val_loader = DataLoader(PairDataset(val_pairs, stoi, config.max_len), batch_size=config.batch_size, shuffle=False)
 
-    model = CharTransformerEncoder(len(stoi), config).to(device)
+    if initial_model is None:
+        model = CharTransformerEncoder(len(stoi), config).to(device)
+    else:
+        model = initial_model.to(device)
+        model.config = config
+        model.resize_token_embeddings(len(stoi))
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
 
     best_state = None
@@ -214,13 +249,19 @@ def cache_matches_config(cached: ModelConfig, requested: ModelConfig) -> bool:
     return all(getattr(cached, key) == getattr(requested, key) for key in keys)
 
 
-def get_or_train_model(df_train: pd.DataFrame, cache_path: str | None, config: ModelConfig):
+def get_or_train_model(df_train: pd.DataFrame, cache_path: str | None, config: ModelConfig, fine_tune: bool = False):
     if cache_path:
         if Path(cache_path).exists():
             model, stoi, cached_config = load_model_cache(cache_path)
             if cache_matches_config(cached_config, config):
-                print(f"loading cached model: {cache_path}")
-                return model, stoi
+                if fine_tune:
+                    print(f"fine-tuning cached model: {cache_path}")
+                    model, stoi = train_char_transformer(df_train, config, initial_model=model, initial_stoi=stoi)
+                    save_model_cache(model, stoi, cache_path)
+                    return model, stoi
+                else:
+                    print(f"loading cached model: {cache_path}")
+                    return model, stoi
             print(f"cache config differs from requested model; retraining and overwriting: {cache_path}")
     model, stoi = train_char_transformer(df_train, config)
     if cache_path:

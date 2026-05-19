@@ -16,10 +16,16 @@ def add_model_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--max-len", type=int, default=80)
     parser.add_argument("--d-model", type=int, default=192)
+    parser.add_argument("--lr", type=float, default=2e-4)
+    parser.add_argument(
+        "--fine-tune",
+        action="store_true",
+        help="Continue training from --cache-path when a compatible cached model exists.",
+    )
 
 
 def model_config(args: argparse.Namespace) -> ModelConfig:
-    return ModelConfig(epochs=args.epochs, batch_size=args.batch_size, max_len=args.max_len, d_model=args.d_model)
+    return ModelConfig(epochs=args.epochs, batch_size=args.batch_size, max_len=args.max_len, d_model=args.d_model, lr=args.lr)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -71,12 +77,12 @@ def main() -> None:
 
     if args.command == "auto-cluster":
         assignment = AssignmentConfig(args.threshold, args.min_train_cluster_size, args.cache_path)
-        workflow_auto_cluster(args.train, args.full, args.output, args.name_col, assignment, cfg)
+        workflow_auto_cluster(args.train, args.full, args.output, args.name_col, assignment, cfg, args.fine_tune)
     elif args.command == "classify-singletons":
         assignment = AssignmentConfig(args.threshold, args.min_train_cluster_size, args.cache_path)
-        workflow_classify_singletons(args.train, args.pending, args.output, args.name_col, args.headerless, assignment, cfg)
+        workflow_classify_singletons(args.train, args.pending, args.output, args.name_col, args.headerless, assignment, cfg, args.fine_tune)
     elif args.command == "merge-training":
-        workflow_merge_training(args.train, args.output, args.threshold, args.topk, args.cache_path, cfg)
+        workflow_merge_training(args.train, args.output, args.threshold, args.topk, args.cache_path, cfg, args.fine_tune)
     elif args.command == "recluster-pending":
         workflow_recluster_pending(
             args.train,
@@ -88,6 +94,7 @@ def main() -> None:
             args.min_cluster_size,
             args.cache_path,
             cfg,
+            args.fine_tune,
         )
 
 

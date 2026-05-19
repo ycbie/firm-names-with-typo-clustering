@@ -15,6 +15,39 @@ There is also a training-set purification command that proposes high-threshold m
 
 The code is a refactor of the original dated research scripts, not a different algorithm. It keeps the original project's core choices: minimal normalization only, a character-level Transformer trained with contrastive pairs, exact normalized matches first, centroid cosine thresholds, conservative singleton retention, and human review of changed clusters.
 
+## First Train, Then Fine-Tune
+
+The recommended iterative use is:
+
+1. Train the first Transformer from scratch with `auto-cluster` or `classify-singletons`.
+2. Manually review changed clusters and update the training set.
+3. Reuse the same `--cache-path` and add `--fine-tune` for later rounds.
+
+Example first round:
+
+```powershell
+name-cluster auto-cluster `
+  --train train_round1.xlsx `
+  --full full_names.xlsx `
+  --output reports/round1.xlsx `
+  --cache-path models/char_transformer.pt
+```
+
+Example later round after human review:
+
+```powershell
+name-cluster classify-singletons `
+  --train train_round2_reviewed.xlsx `
+  --pending pending_round2.xlsx `
+  --output reports/round2_singletons.xlsx `
+  --cache-path models/char_transformer.pt `
+  --fine-tune `
+  --epochs 30 `
+  --lr 5e-5
+```
+
+If the cache does not exist, the command trains from scratch. If the cache exists and the model structure matches, `--fine-tune` continues training from that model and overwrites the cache. If the model structure changed, the code retrains from scratch because the old cache is no longer compatible.
+
 ## Install
 
 ```powershell
@@ -50,6 +83,22 @@ name-cluster classify-singletons `
   --batch-size 16 `
   --d-model 96 `
   --cache-path models/demo_char_transformer.pt
+```
+
+To demonstrate fine-tuning on the same synthetic setup:
+
+```powershell
+name-cluster classify-singletons `
+  --train examples/fake_training.csv `
+  --pending examples/fake_pending.csv `
+  --output reports/demo_singleton_finetuned.xlsx `
+  --threshold 0.90 `
+  --epochs 5 `
+  --lr 5e-5 `
+  --batch-size 16 `
+  --d-model 96 `
+  --cache-path models/demo_char_transformer.pt `
+  --fine-tune
 ```
 
 ```powershell

@@ -14,6 +14,10 @@ This repository is intentionally a cleaned, reusable refactor of the original wo
 | `workflows.py::workflow_recluster_pending` | 0224 singleton-reclustering script | Internal reclustering of pending names by exact normalized duplicates and embedding cosine connected components, exported for manual review. |
 | `cli.py` | Refactor layer only | Replaces hard-coded Windows paths with command-line arguments. This is an engineering wrapper around the original workflow, not a new algorithm. |
 
+## Added Engineering Optimization
+
+The current repository also adds an optional `--fine-tune` switch. This does not change the modeling idea; it changes how later rounds are trained. The first round can still train from scratch, while later human-reviewed rounds can continue training from the cached Transformer instead of starting over.
+
 ## Deliberately Removed From GitHub
 
 - Real Myanmar exporter names and all private raw/intermediate/final data.

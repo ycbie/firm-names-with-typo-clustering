@@ -71,11 +71,12 @@ def workflow_auto_cluster(
     name_col: str | None = None,
     assignment: AssignmentConfig = AssignmentConfig(),
     model_config: ModelConfig = ModelConfig(),
+    fine_tune: bool = False,
 ) -> None:
     df_train = read_training(train_path)
     df_full = read_full_sample(full_path, name_col=name_col)
     df_train_use, _ = split_training_by_cluster_size(df_train, assignment.min_train_cluster_size)
-    model, stoi = get_or_train_model(df_train_use, assignment.cache_path, model_config)
+    model, stoi = get_or_train_model(df_train_use, assignment.cache_path, model_config, fine_tune=fine_tune)
 
     train_embeddings = encode_texts(model, stoi, df_train_use["name_norm"].tolist())
     centroids, centroid_ids = cluster_centroids(df_train_use, train_embeddings)
@@ -115,13 +116,14 @@ def workflow_classify_singletons(
     headerless: bool = False,
     assignment: AssignmentConfig = AssignmentConfig(),
     model_config: ModelConfig = ModelConfig(),
+    fine_tune: bool = False,
 ) -> None:
     df_train = read_training(train_path)
     df_train_use, df_train_singleton = split_training_by_cluster_size(df_train, assignment.min_train_cluster_size)
     df_pending = read_pending(pending_path, name_col=name_col, headerless=headerless)
     df_pending = df_pending[~df_pending["name_norm"].isin(set(df_train_use["name_norm"]))].copy()
 
-    model, stoi = get_or_train_model(df_train_use, assignment.cache_path, model_config)
+    model, stoi = get_or_train_model(df_train_use, assignment.cache_path, model_config, fine_tune=fine_tune)
     train_embeddings = encode_texts(model, stoi, df_train_use["name_norm"].tolist())
     centroids, centroid_ids = cluster_centroids(df_train_use, train_embeddings)
     exact = exact_name_map(df_train_use)
@@ -167,9 +169,10 @@ def workflow_merge_training(
     topk: int = 20,
     cache_path: str | None = "models/char_transformer_cache.pt",
     model_config: ModelConfig = ModelConfig(),
+    fine_tune: bool = False,
 ) -> None:
     df_train = read_training(train_path)
-    model, stoi = get_or_train_model(df_train, cache_path, model_config)
+    model, stoi = get_or_train_model(df_train, cache_path, model_config, fine_tune=fine_tune)
     embeddings = encode_texts(model, stoi, df_train["name_norm"].tolist())
     centroids, ids = cluster_centroids(df_train, embeddings)
     scores = centroids @ centroids.T
@@ -230,11 +233,12 @@ def workflow_recluster_pending(
     min_cluster_size: int = 2,
     cache_path: str | None = "models/char_transformer_cache.pt",
     model_config: ModelConfig = ModelConfig(),
+    fine_tune: bool = False,
 ) -> None:
     """Cluster pending names internally, matching the original singleton reclustering script."""
     df_train = read_training(train_path)
     df_pending = read_pending(pending_path, name_col=name_col, headerless=headerless)
-    model, stoi = get_or_train_model(df_train, cache_path, model_config)
+    model, stoi = get_or_train_model(df_train, cache_path, model_config, fine_tune=fine_tune)
 
     embeddings = encode_texts(model, stoi, df_pending["name_norm"].tolist())
     uf = UnionFind(list(range(len(df_pending))))
