@@ -1,43 +1,37 @@
 # Firm Names With Typo Clustering
 
-A character-level Transformer workflow for clustering noisy English company names with typos, abbreviations, punctuation changes, and inconsistent spacing.
+Character-level Transformer workflow for clustering noisy English company names.
 
-This repository is a cleaned demo version of a Myanmar exporter-name cleaning project. The real exporter names, intermediate spreadsheets, model checkpoints, and final empirical data files are not included. The `examples/` folder contains synthetic company names that mimic the same type of spelling noise.
+This repo is a cleaned demo version of a Myanmar exporter-name cleaning project. The real data is not included; the `examples/` folder uses synthetic company names with similar typo patterns.
 
-## Original Project Context
+## Background
 
-In the real project, there were more than 50,000 distinct exporter-name strings to classify. Besides the noisy exporter names, the trade records also contained some auxiliary fields:
+The original task had 50,000+ distinct exporter-name strings. Besides company names, the trade records also had customs/export-station information, HS codes, exporter/company codes, and an incomplete list of correct company names.
 
-- customs office / export station information;
-- HS industry/product codes;
-- exporter/company codes;
-- an incomplete list of correct company names.
+Those extra fields were useful, but messy. HS codes and company codes were missing for some records and could be wrong. I used them as human-checking evidence, not as rules for firm identity.
 
-The HS codes and exporter/company codes were incomplete: not every firm had them, and some codes could be wrong. They were therefore used only as auxiliary evidence for human checking, not as sufficient or necessary conditions for deciding firm identity.
+The first training set came from fuzzy matching typo-heavy names against the incomplete correct-name list, then manually checking the candidates with the auxiliary fields. That gave roughly 3,000 initial training rows. The Transformer workflow starts from that kind of `id,name` training set.
 
-Before training the Transformer, we first fuzzy-matched typo-heavy exporter names against the incomplete correct-name list. Then we manually checked these fuzzy candidates together with the auxiliary customs/code information and built an initial rough training set of about 3,000 rows.
+## What It Does
 
-This repository starts from that cleaned training-set idea: the model input is still firm-name clusters (`id,name`), while auxiliary fields remain part of the human-review process rather than the core model.
+The project tries to group different spellings of the same firm while avoiding false merges.
 
-## What This Project Does
+The model is intentionally conservative:
 
-The goal is to identify company-name strings that refer to the same firm while avoiding false merges between different firms.
-
-The workflow is deliberately conservative:
-
-- use minimal normalization only;
-- learn similarity from manually confirmed firm-name clusters;
-- assign a name only when exact matching or cosine similarity is strong enough;
-- leave uncertain names as singletons;
-- send changed clusters to human review before the next round.
+- minimal normalization only;
+- character-level Transformer embeddings;
+- exact normalized matches first;
+- centroid cosine similarity with a threshold;
+- uncertain names stay as singletons;
+- changed clusters are meant to be reviewed by a human.
 
 ## Demo Data
 
-The synthetic demo contains:
+The demo data is small and fake:
 
-- `examples/fake_training.csv`: 24 name variants for 6 known firms;
-- `examples/fake_full_sample.csv`: 18 names to cluster;
-- `examples/fake_pending.csv`: 9 pending names, including 3 variants of a new unseen firm.
+- `fake_training.csv`: 24 names for 6 known firms;
+- `fake_full_sample.csv`: 18 names to cluster;
+- `fake_pending.csv`: 9 pending names, including 3 variants of a new unseen firm.
 
 No real company names are included.
 
@@ -49,11 +43,9 @@ python -m venv .venv
 pip install -e .
 ```
 
-## Core Commands
+## Quick Demo
 
-### 1. Train And Cluster A Full Sample
-
-Use this when you have a labeled training set and a full list of company names.
+Train a small character Transformer and cluster the fake full sample:
 
 ```powershell
 name-cluster auto-cluster `
@@ -67,11 +59,7 @@ name-cluster auto-cluster `
   --cache-path models/demo_char_transformer.pt
 ```
 
-Output: a full sample with `cluster_id`, assignment score, and assignment method. Names below the threshold become new singleton IDs.
-
-### 2. Classify Pending Singletons Into Existing Clusters
-
-Use this after you already have cleaned clusters and want to conservatively assign remaining names into them.
+Then try assigning pending names into existing clusters:
 
 ```powershell
 name-cluster classify-singletons `
@@ -85,51 +73,19 @@ name-cluster classify-singletons `
   --cache-path models/demo_char_transformer.pt
 ```
 
-Output:
+## Real Workflow
 
-- `sheet1_all_clusters`: training clusters plus newly assigned names;
-- `sheet2_clusters_with_new`: clusters that received new names, for manual review;
-- `sheet3_unclassified`: names left unassigned.
+In a real cleaning job, the loop looks like this:
 
-### 3. Propose Training-Set Merges
+1. Build an initial `id,name` training set by fuzzy matching and manual checking.
+2. Run `auto-cluster` on the full name list.
+3. Review suspicious clusters and update the training set.
+4. Run `merge-training` to find possible training-set merges.
+5. Run `classify-singletons` to put high-confidence singleton names into existing clusters.
+6. Run `recluster-pending` when remaining names may form new clusters among themselves.
+7. Fine-tune the cached Transformer after each reviewed update.
 
-Use this to purify a training set by finding high-confidence merge candidates among existing IDs.
-
-```powershell
-name-cluster merge-training `
-  --train examples/fake_training.csv `
-  --output reports/demo_merge_training.xlsx `
-  --threshold 0.93 `
-  --topk 20 `
-  --cache-path models/demo_char_transformer.pt
-```
-
-Output: merge candidates generated by exact normalized-name overlap and high-threshold centroid similarity. These candidates should be manually reviewed.
-
-### 4. Recluster Pending Names Among Themselves
-
-Use this when names cannot be assigned to existing clusters but may form new clusters with each other.
-
-```powershell
-name-cluster recluster-pending `
-  --train examples/fake_training.csv `
-  --pending examples/fake_pending.csv `
-  --output reports/demo_pending_recluster.xlsx `
-  --threshold 0.90 `
-  --min-cluster-size 2 `
-  --epochs 20 `
-  --batch-size 16 `
-  --d-model 96 `
-  --cache-path models/demo_char_transformer.pt
-```
-
-Output: candidate pending-name clusters for manual review, plus remaining singletons.
-
-## First Train, Then Fine-Tune
-
-The recommended real workflow is not to retrain from scratch forever.
-
-First round:
+First round, train from scratch:
 
 ```powershell
 name-cluster auto-cluster `
@@ -139,7 +95,7 @@ name-cluster auto-cluster `
   --cache-path models/char_transformer.pt
 ```
 
-Later rounds, after human review:
+Later rounds, continue from the cached model:
 
 ```powershell
 name-cluster classify-singletons `
@@ -152,13 +108,16 @@ name-cluster classify-singletons `
   --lr 5e-5
 ```
 
-With `--fine-tune`, the command loads the cached Transformer, continues training on the updated training set, saves the updated model, and then runs the requested clustering/classification step.
+## Commands
 
-If the cache does not exist, the command trains from scratch. If the model structure changed, the code retrains from scratch rather than loading an incompatible checkpoint.
+- `auto-cluster`: train or load a model, assign IDs to a full sample, and create singleton IDs for names below threshold.
+- `classify-singletons`: assign pending names into existing reliable clusters; output changed clusters for review.
+- `merge-training`: propose high-confidence merges among existing training IDs.
+- `recluster-pending`: cluster pending names among themselves and output new candidates for review.
 
 ## Input Format
 
-Training data must have at least two columns. The first column is the firm ID and the second column is the raw company name.
+Training data needs at least two columns:
 
 ```text
 id,name
@@ -168,22 +127,9 @@ id,name
 2,Asia Jaed Export Co
 ```
 
-Full-sample or pending data must include a company-name column. By default, the first column is used. You can pass `--name-col your_column_name`.
+Full-sample and pending files need a company-name column. By default, the first column is used. CSV and Excel files are supported.
 
-CSV and Excel files are supported.
-
-## Method Summary
-
-1. Normalize names minimally: lowercase, remove punctuation into spaces, collapse spaces.
-2. Build a character vocabulary from training names.
-3. Train a character-level Transformer using positive pairs from the same firm ID.
-4. Encode names into L2-normalized vectors.
-5. Represent each known firm cluster by its centroid.
-6. Assign names by exact normalized match first, then nearest centroid if cosine similarity is above threshold.
-7. Keep uncertain names unassigned or singleton.
-8. Review changed clusters manually and fine-tune on confirmed updates.
-
-## Documentation
+## Docs
 
 - [Workflow report summary](docs/workflow_report.md)
 - [Original code mapping](docs/original_code_mapping.md)
