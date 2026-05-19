@@ -183,12 +183,6 @@ CSV and Excel files are supported.
 7. Keep uncertain names unassigned or singleton.
 8. Review changed clusters manually and fine-tune on confirmed updates.
 
-## Data Policy
-
-Real raw data and generated outputs are deliberately excluded by `.gitignore`.
-
-Keep production data under `data/raw/`, `data/interim/`, `data/processed/`, or outside this repository. Keep model checkpoints under `models/`.
-
 ## Documentation
 
 - [Workflow report summary](docs/workflow_report.md)
