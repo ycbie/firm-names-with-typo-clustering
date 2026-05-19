@@ -4,6 +4,21 @@ A character-level Transformer workflow for clustering noisy English company name
 
 This repository is a cleaned demo version of a Myanmar exporter-name cleaning project. The real exporter names, intermediate spreadsheets, model checkpoints, and final empirical data files are not included. The `examples/` folder contains synthetic company names that mimic the same type of spelling noise.
 
+## Original Project Context
+
+In the real project, there were more than 50,000 distinct exporter-name strings to classify. Besides the noisy exporter names, the trade records also contained some auxiliary fields:
+
+- customs office / export station information;
+- HS industry/product codes;
+- exporter/company codes;
+- an incomplete list of correct company names.
+
+The HS codes and exporter/company codes were incomplete: not every firm had them, and some codes could be wrong. They were therefore used only as auxiliary evidence for human checking, not as sufficient or necessary conditions for deciding firm identity.
+
+Before training the Transformer, we first fuzzy-matched typo-heavy exporter names against the incomplete correct-name list. Then we manually checked these fuzzy candidates together with the auxiliary customs/code information and built an initial rough training set of about 3,000 rows.
+
+This repository starts from that cleaned training-set idea: the model input is still firm-name clusters (`id,name`), while auxiliary fields remain part of the human-review process rather than the core model.
+
 ## What This Project Does
 
 The goal is to identify company-name strings that refer to the same firm while avoiding false merges between different firms.
