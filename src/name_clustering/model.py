@@ -193,6 +193,9 @@ def train_char_transformer(df_train: pd.DataFrame, config: ModelConfig) -> Tuple
 
 
 def save_model_cache(model: CharTransformerEncoder, stoi: Dict[str, int], path: str) -> None:
+    from pathlib import Path
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     torch.save({"state_dict": model.state_dict(), "stoi": stoi, "config": asdict(model.config)}, path)
 
 

@@ -55,6 +55,7 @@ def split_training_by_cluster_size(df_train: pd.DataFrame, min_size: int) -> Tup
 
 
 def write_excel_sheets(path: str | Path, sheets: dict[str, pd.DataFrame]) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         for sheet_name, frame in sheets.items():
             frame.to_excel(writer, index=False, sheet_name=sheet_name[:31])

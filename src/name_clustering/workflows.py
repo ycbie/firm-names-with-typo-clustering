@@ -176,6 +176,21 @@ def workflow_merge_training(
 
     uf = UnionFind(ids)
     merge_edges = []
+    for name_norm, group in df_train.groupby("name_norm"):
+        overlap_ids = sorted(group["id"].dropna().astype(int).unique())
+        if name_norm and len(overlap_ids) > 1:
+            anchor = overlap_ids[0]
+            for right_id in overlap_ids[1:]:
+                uf.union(anchor, right_id)
+                merge_edges.append(
+                    {
+                        "left_id": anchor,
+                        "right_id": right_id,
+                        "cosine": 1.0,
+                        "method": "exact_name_overlap",
+                    }
+                )
+
     for i, left_id in enumerate(ids):
         nearest = np.argsort(scores[i])[::-1][1 : topk + 1]
         for j in nearest:
@@ -183,7 +198,7 @@ def workflow_merge_training(
             if score >= threshold:
                 right_id = ids[j]
                 uf.union(left_id, right_id)
-                merge_edges.append({"left_id": left_id, "right_id": right_id, "cosine": score})
+                merge_edges.append({"left_id": left_id, "right_id": right_id, "cosine": score, "method": "centroid"})
 
     id_map = {old_id: uf.find(old_id) for old_id in ids}
     unique_new_ids = {root: idx + 1 for idx, root in enumerate(sorted(set(id_map.values())))}
