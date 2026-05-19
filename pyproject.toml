@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myanmar-exporter-name-clustering"
+version = "0.1.0"
+description = "Character-level Transformer workflow for typo-heavy English firm-name clustering."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "openpyxl>=3.1",
+  "pandas>=2.0",
+  "torch>=2.0",
+  "tqdm>=4.66",
+]
+
+[project.scripts]
+name-cluster = "name_clustering.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

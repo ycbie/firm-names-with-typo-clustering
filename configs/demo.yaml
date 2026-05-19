@@ -1,0 +1,12 @@
+# Demonstration commands use synthetic company names in examples/.
+# The real Myanmar exporter dataset is not included in this repository.
+
+model:
+  epochs: 20
+  batch_size: 16
+  max_len: 80
+  d_model: 96
+
+assignment:
+  threshold: 0.90
+  min_train_cluster_size: 2
