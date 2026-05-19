@@ -1,5 +1,6 @@
 import random
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -199,22 +200,28 @@ def save_model_cache(model: CharTransformerEncoder, stoi: Dict[str, int], path: 
     torch.save({"state_dict": model.state_dict(), "stoi": stoi, "config": asdict(model.config)}, path)
 
 
-def load_model_cache(path: str) -> Tuple[CharTransformerEncoder, Dict[str, int]]:
+def load_model_cache(path: str) -> Tuple[CharTransformerEncoder, Dict[str, int], ModelConfig]:
     payload = torch.load(path, map_location=get_device())
     config = ModelConfig(**payload["config"])
     model = CharTransformerEncoder(len(payload["stoi"]), config).to(get_device())
     model.load_state_dict(payload["state_dict"])
     model.eval()
-    return model, payload["stoi"]
+    return model, payload["stoi"], config
+
+
+def cache_matches_config(cached: ModelConfig, requested: ModelConfig) -> bool:
+    keys = ["max_len", "d_model", "n_head", "n_layers", "d_ff", "dropout"]
+    return all(getattr(cached, key) == getattr(requested, key) for key in keys)
 
 
 def get_or_train_model(df_train: pd.DataFrame, cache_path: str | None, config: ModelConfig):
     if cache_path:
-        from pathlib import Path
-
         if Path(cache_path).exists():
-            print(f"loading cached model: {cache_path}")
-            return load_model_cache(cache_path)
+            model, stoi, cached_config = load_model_cache(cache_path)
+            if cache_matches_config(cached_config, config):
+                print(f"loading cached model: {cache_path}")
+                return model, stoi
+            print(f"cache config differs from requested model; retraining and overwriting: {cache_path}")
     model, stoi = train_char_transformer(df_train, config)
     if cache_path:
         save_model_cache(model, stoi, cache_path)
